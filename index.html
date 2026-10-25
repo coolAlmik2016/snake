@@ -100,7 +100,12 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visibl
   </section>
   <section id="huevo-integration" hidden aria-label="Сообщество huEVO">
 <div class="head"><strong id="hu-player">huEVO · подключение</strong><span id="hu-status" class="muted" role="status">Проверка входа...</span></div>
-<div class="tabs"><button type="button" id="hu-global">Топ игроков</button><button type="button" id="hu-friends">Рейтинг друзей</button><button type="button" id="hu-share">Поделиться</button></div>
+<div class="tabs"><button type="button" id="hu-global">Топ игроков</button><button type="button" id="hu-friends">Рейтинг друзей</button><button type="button" id="hu-share">Поделиться</button><button type="button" id="hu-donate">Донат</button></div>
+<section id="hu-donate-panel" hidden aria-label="Поддержать разработку" style="border:1px solid #526679;background:#253242;border-radius:7px;padding:10px;margin-bottom:10px">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><strong>Поддержать Snake huEVO</strong><button id="hu-donate-close" type="button" aria-label="Закрыть окно доната">✕</button></div>
+  <p style="margin:7px 0;font-size:12px">Донаты будут проходить только через внутреннюю платёжную систему huEVO.</p>
+  <p style="margin:7px 0 0;font-size:12px;color:#aec3d8">Оплата пока не активирована: ожидается уточнение параметров платёжного API huEVO. Списаний нет.</p>
+</section>
 <div class="content" id="hu-results">Загрузка...</div>
 <div class="muted"></div>
 </section>
@@ -435,7 +440,7 @@ const params=new URLSearchParams(location.search);
 if(!params.has('hu_hash')||!params.has('hu_user_id'))return;
 root.hidden=false;
 const query=location.search;
-const buttons=['hu-global','hu-friends','hu-share'].map(id=>document.getElementById(id));
+const buttons=['hu-global','hu-friends','hu-share','hu-donate'].map(id=>document.getElementById(id));
 for(const b of buttons)b.disabled=true;
 let session=null;
 async function call(path,opts={}){
@@ -460,6 +465,13 @@ async function guard(fn,button){
 const global=document.getElementById('hu-global');
 const friends=document.getElementById('hu-friends');
 const share=document.getElementById('hu-share');
+const donate=document.getElementById('hu-donate');
+const donatePanel=document.getElementById('hu-donate-panel');
+const donateClose=document.getElementById('hu-donate-close');
+donate.onclick=()=>{donatePanel.hidden=!donatePanel.hidden;donate.setAttribute('aria-expanded',String(!donatePanel.hidden))};
+donateClose.onclick=()=>{donatePanel.hidden=true;donate.setAttribute('aria-expanded','false')};
+donate.setAttribute('aria-controls','hu-donate-panel');
+donate.setAttribute('aria-expanded','false');
 global.onclick=()=>guard(async()=>{const d=await call('/api/huevo/leaderboard');renderRank(d.players);show('Топ игроков huEVO · '+(d.mode==='test'?'тестовый режим':'общий рейтинг'))},global);
 friends.onclick=()=>guard(async()=>{
  if(!window.huevo?.requestAccess)throw Error('Открой игру внутри huEVO');
