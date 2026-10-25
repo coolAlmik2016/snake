@@ -47,6 +47,19 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visibl
 @media(max-width:370px){.shop-title{font-size:12px}.icon-btn{font-size:11px;padding:4px 6px}.wallet{padding:4px 6px}.score{flex-direction:column;gap:2px}.score strong{font-size:18px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
+<style>
+#huevo-integration{max-width:760px;margin:12px auto 18px;padding:12px;border:1px solid #394957;border-radius:8px;background:#20272e;color:#e8f2ff;font:13px/1.5 system-ui,sans-serif}
+#huevo-integration[hidden]{display:none}
+#huevo-integration .head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+#huevo-integration .tabs{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0}
+#huevo-integration button{background:#35475b;border:1px solid #546a80;color:#f3f6fb;border-radius:5px;padding:7px 10px;font-size:12px}
+#huevo-integration button:disabled{opacity:.5}
+#huevo-integration .content{background:#161d24;padding:10px;border-radius:6px;min-height:40px}
+#huevo-integration ol{padding-left:22px;margin:4px 0}
+#huevo-integration li{padding:4px 0}
+#huevo-integration .muted{color:#a8bacc;font-size:11px}
+</style>
+<script src="https://huevo.su/static/js/huevo-apps-v1.js" data-origins="huevo.departament.site"></script>
 </head>
 <body>
 <main class="shell" aria-label="Змейка huEVO">
@@ -292,5 +305,92 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visibl
     updateUI();draw();requestAnimationFrame(tick);
   })();
   </script>
+<section id="huevo-integration" hidden aria-label="Сообщество huEVO">
+<div class="head"><strong id="hu-player">huEVO · подключение</strong><span id="hu-status" class="muted" role="status">Проверка входа...</span></div>
+<div class="tabs"><button type="button" id="hu-global">Топ игроков</button><button type="button" id="hu-friends">Рейтинг друзей</button><button type="button" id="hu-save">Сохранить цвета</button><button type="button" id="hu-load">Загрузить цвета</button><button type="button" id="hu-share">Поделиться</button></div>
+<div class="content" id="hu-results">Загрузка...</div>
+<div class="muted">Рейтинг тестовый: результаты пока не защищены от накрутки. На бесплатном сервере облачные данные могут сбрасываться.</div>
+</section>
+<script>
+(()=>{
+'use strict';
+const API="https://snake-api-0013.onrender.com";
+const root=document.getElementById('huevo-integration');
+const status=document.getElementById('hu-status');
+const results=document.getElementById('hu-results');
+const show=(message)=>{status.textContent=message};
+const write=(message)=>{results.textContent=message};
+const params=new URLSearchParams(location.search);
+if(!params.has('hu_hash')||!params.has('hu_user_id'))return;
+root.hidden=false;
+const query=location.search;
+const buttons=['hu-global','hu-friends','hu-save','hu-load','hu-share'].map(id=>document.getElementById(id));
+for(const b of buttons)b.disabled=true;
+let session=null;
+async function call(path,opts={}){
+ const headers={'Content-Type':'application/json',...(session?{'Authorization':'Bearer '+session}:{})};
+ const resp=await fetch(API+path,{...opts,headers:{...headers,...opts.headers}});
+ const data=await resp.json().catch(()=>({}));
+ if(!resp.ok)throw new Error(typeof data.error?.message==='string'?data.error.message:'Ошибка API ('+resp.status+')');
+ return data;
+}
+function renderRank(players){
+ results.replaceChildren();
+ const ol=document.createElement('ol');results.append(ol);
+ if(!players?.length){write('Рекордов пока нет.');return}
+ for(const u of players.slice(0,20)){
+  const li=document.createElement('li');li.textContent=String(u.name||'Игрок')+' — '+Number(u.score||0)+' очков';ol.append(li);
+ }
+}
+async function guard(fn,button){
+ button.disabled=true;
+ try{await fn()}catch(e){show(e.message||'Ошибка подключения')}finally{button.disabled=false}
+}
+const global=document.getElementById('hu-global');
+const friends=document.getElementById('hu-friends');
+const save=document.getElementById('hu-save');
+const load=document.getElementById('hu-load');
+const share=document.getElementById('hu-share');
+global.onclick=()=>guard(async()=>{const d=await call('/api/huevo/leaderboard');renderRank(d.players);show('Топ игроков huEVO · '+(d.mode==='test'?'тестовый режим':'общий рейтинг'))},global);
+friends.onclick=()=>guard(async()=>{
+ if(!window.huevo?.requestAccess)throw Error('Открой игру внутри huEVO');
+ const grant=await window.huevo.requestAccess(['friends']);
+ if(!grant?.token)throw Error('Доступ к друзьям не предоставлен');
+ try{
+  const d=await call('/api/huevo/friends',{method:'POST',body:JSON.stringify({token:grant.token,offset:0,sort:'name'})});
+  renderRank(d.players);show('Рейтинг друзей · найдено '+Number(d.total||0)+' игроков в приложении');
+ }finally{grant.token=null}
+},friends);
+function localSave(){
+ try{return {wallet:Number(localStorage.getItem('huevo-snake-apples')||0),skinId:localStorage.getItem('huevo-snake-color')||'mint',owned:JSON.parse(localStorage.getItem('huevo-snake-skins')||'["mint"]')}}catch{return {wallet:0,skinId:'mint',owned:['mint']}}
+}
+save.onclick=()=>guard(async()=>{await call('/api/huevo/save',{method:'PUT',body:JSON.stringify({save:localSave()})});show('Цвета сохранены на сервере (тестовое хранилище)')},save);
+load.onclick=()=>guard(async()=>{
+ const d=await call('/api/huevo/me');
+ if(!d.save)return show('Облачного сохранения пока нет');
+ try{
+  localStorage.setItem('huevo-snake-apples',String(d.save.wallet||0));
+  localStorage.setItem('huevo-snake-color',d.save.skinId||'mint');
+  localStorage.setItem('huevo-snake-skins',JSON.stringify(d.save.owned||['mint']));
+  show('Цвета загружены. Обнови страницу, чтобы применить изменения.');
+ }catch{show('Браузер запретил сохранение')}
+},load);
+share.onclick=()=>guard(async()=>{
+ if(!window.huevo?.share)throw Error('Открой игру внутри huEVO');
+ const d=await window.huevo.share();show(d?.shared?'Ссылка отправлена':'Поделиться отменено');
+},share);
+(async()=>{
+ try{
+  const login=await call('/api/huevo/login',{method:'POST',body:JSON.stringify({query})});
+  session=login.token;
+  document.getElementById('hu-player').textContent=login.user?.name||'Игрок huEVO';
+  for(const b of buttons)b.disabled=false;
+  show('Вход подтверждён');
+  const ranks=await call('/api/huevo/leaderboard');renderRank(ranks.players);
+ }catch(e){write('Игра доступна без подключения к рейтингу.');show('Ошибка входа: '+(e.message||'неизвестная ошибка'))}
+})();
+// Счёт не загружается в рейтинг автоматически: для защиты от накрутки нужна серверная проверка игровой партии.
+})();
+</script>
 </body>
 </html>
