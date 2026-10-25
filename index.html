@@ -507,8 +507,16 @@ share.onclick=()=>guard(async()=>{
   document.getElementById('hu-player').textContent=login.user?.name||'Игрок huEVO';
   const state=await call('/api/huevo/me');
   let inventory=state.inventory||state.save;
-  // Existing accounts with no prior cloud inventory may bring their old local items once.
-  if(inventory&&!inventory.owned?.length)inventory=null;
+  if(state.canImportLegacy){
+    const old=localSave();
+    const hasOldProgress=old.wallet>0||old.owned?.some(id=>id!=='mint');
+    if(hasOldProgress){
+      try{
+        const imported=await call('/api/huevo/inventory/import',{method:'POST',body:JSON.stringify({save:old})});
+        inventory=imported.inventory;
+      }catch(e){show('Старые данные не удалось перенести: '+e.message)}
+    }
+  }
   if(inventory)window.snakeApplyInventory?.(inventory,state.user?.best);
   for(const b of buttons)b.disabled=false;
   show('Сохранения синхронизируются автоматически');
