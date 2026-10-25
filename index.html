@@ -58,6 +58,26 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visibl
 #huevo-integration ol{padding-left:22px;margin:4px 0}
 #huevo-integration li{padding:4px 0}
 #huevo-integration .muted{color:#a8bacc;font-size:11px}
+
+/* huEVO side panel: left of board in embedded desktop/tablet frames */
+@media(min-width:650px){
+ .shell{grid-template-columns:minmax(195px,260px) minmax(0,1fr);grid-template-rows:auto auto;align-items:start;gap:12px;max-width:1100px}
+ .shell>.shop{grid-column:1 / -1;grid-row:1}
+ .shell>#huevo-integration{grid-column:1;grid-row:2;align-self:start;max-width:none;width:100%;margin:0;padding:11px;min-width:0;position:sticky;top:8px;max-height:calc(100dvh - 18px);overflow-y:auto}
+ .shell>.arena{grid-column:2;grid-row:2;margin:0;min-width:0;min-height:0;gap:8px;align-content:start}
+ .arena .board-shell{width:min(100%,450px,calc(100dvh - 240px));margin:0 auto}
+ .arena .scorebar,.arena .bottom{width:min(100%,450px)}
+ #huevo-integration .tabs{display:grid;grid-template-columns:1fr;gap:6px}
+ #huevo-integration .tabs button{width:100%;text-align:left}
+ #huevo-integration .head{display:block}
+ #huevo-integration .head #hu-status{display:block;margin-top:4px}
+}
+@media(max-width:649px){
+ .shell{display:flex;flex-direction:column;gap:9px}
+ .shell>.shop{order:0;width:100%}
+ .shell>.arena{order:1;width:100%}
+ .shell>#huevo-integration{order:2;width:100%;margin:4px 0 12px}
+}
 </style>
 <script src="https://huevo.su/static/js/huevo-apps-v1.js" data-origins="huevo.departament.site"></script>
 </head>
@@ -72,6 +92,12 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visibl
     </div>
     <div id="shop" class="shop-list" aria-label="Доступные цвета"></div>
   </section>
+  <section id="huevo-integration" hidden aria-label="Сообщество huEVO">
+<div class="head"><strong id="hu-player">huEVO · подключение</strong><span id="hu-status" class="muted" role="status">Проверка входа...</span></div>
+<div class="tabs"><button type="button" id="hu-global">Топ игроков</button><button type="button" id="hu-friends">Рейтинг друзей</button><button type="button" id="hu-save">Сохранить цвета</button><button type="button" id="hu-load">Загрузить цвета</button><button type="button" id="hu-share">Поделиться</button></div>
+<div class="content" id="hu-results">Загрузка...</div>
+<div class="muted">Сервер проверяет записанные ходы, но полностью исключить автоматизацию и накрутку пока нельзя. На бесплатном сервере облачные данные могут сбрасываться.</div>
+</section>
   <section class="arena" aria-label="Игровое поле и результаты">
     <div class="board-shell">
       <canvas id="board" width="480" height="480" tabindex="0" aria-label="Поле игры Змейка"></canvas>
@@ -321,12 +347,7 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visibl
     updateUI();draw();requestAnimationFrame(tick);
   })();
   </script>
-<section id="huevo-integration" hidden aria-label="Сообщество huEVO">
-<div class="head"><strong id="hu-player">huEVO · подключение</strong><span id="hu-status" class="muted" role="status">Проверка входа...</span></div>
-<div class="tabs"><button type="button" id="hu-global">Топ игроков</button><button type="button" id="hu-friends">Рейтинг друзей</button><button type="button" id="hu-save">Сохранить цвета</button><button type="button" id="hu-load">Загрузить цвета</button><button type="button" id="hu-share">Поделиться</button></div>
-<div class="content" id="hu-results">Загрузка...</div>
-<div class="muted">Сервер проверяет записанные ходы, но полностью исключить автоматизацию и накрутку пока нельзя. На бесплатном сервере облачные данные могут сбрасываться.</div>
-</section>
+
 <script>
 (()=>{
 'use strict';
