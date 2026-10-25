@@ -106,6 +106,7 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visibl
     const canvas=$('board'),ctx=canvas.getContext('2d');
     const vectors={up:{x:0,y:-1},right:{x:1,y:0},down:{x:0,y:1},left:{x:-1,y:0}};
     let snake,food,direction,queued,turned,score,level;
+    let runSeed=null,runId=null,runMoves=[];
     let playing=false,paused=false,finished=false,acc=0,last=0;
     let best=0, wallet=0, soundOn=true, skinId='mint';
     const skins=[
@@ -195,7 +196,9 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visibl
     function newFood(){
       const free=[];
       for(let y=0;y<N;y++) for(let x=0;x<N;x++) if(!snake.some(p=>p.x===x&&p.y===y)) free.push({x,y});
-      return free.length?free[Math.floor(Math.random()*free.length)]:null;
+      if(!free.length)return null;
+      if(runSeed!==null){runSeed=(Math.imul(runSeed,1664525)+1013904223)>>>0;return free[Math.floor(runSeed/4294967296*free.length)];}
+      return free[Math.floor(Math.random()*free.length)];
     }
     function updateUI(){
       $('score').textContent=score;$('best').textContent=best;$('level').textContent=level;
@@ -211,7 +214,14 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visibl
       $('message').textContent=title;$('subtitle').textContent=subtitle;$('start').textContent=button;
       $('overlay').hidden=false;
     }
-    function start(){
+    async function start(){
+      let challenge=null;
+      if(typeof window.snakeBeginRun==='function'){
+        try{challenge=await window.snakeBeginRun()}catch(_){challenge=null}
+      }
+      runId=challenge?.runId||null;
+      runSeed=Number.isInteger(challenge?.seed)?(challenge.seed>>>0):null;
+      runMoves=[];
       snake=[{x:7,y:10},{x:6,y:10},{x:5,y:10}];
       direction=vectors.right;queued=direction;turned=false;
       score=0;level=1;food=newFood();playing=true;paused=false;finished=false;
@@ -220,9 +230,15 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visibl
     function finish(won=false){
       playing=false;paused=false;finished=true;sfx(won?'win':'finish');updateUI();
       showOverlay(won?'Победа!':'Игра окончена','Твой счёт: '+score+' · Рекорд: '+best,'Играть снова');
+      if(runId && typeof window.snakeEndRun==='function'){
+        const submission={runId,moves:runMoves.slice(),steps:runMoves.length,score};
+        runId=null;runSeed=null;runMoves=[];
+        window.snakeEndRun(submission).catch(()=>{});
+      }
     }
     function step(){
       direction=queued;turned=false;
+      if(runId)runMoves.push(Object.entries(vectors).find(([,v])=>v===direction)?.[0]||'right');
       const head={x:snake[0].x+direction.x,y:snake[0].y+direction.y};
       const eating=food&&eq(head,food);
       const collidable=eating?snake:snake.slice(0,-1);
@@ -309,7 +325,7 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visibl
 <div class="head"><strong id="hu-player">huEVO · подключение</strong><span id="hu-status" class="muted" role="status">Проверка входа...</span></div>
 <div class="tabs"><button type="button" id="hu-global">Топ игроков</button><button type="button" id="hu-friends">Рейтинг друзей</button><button type="button" id="hu-save">Сохранить цвета</button><button type="button" id="hu-load">Загрузить цвета</button><button type="button" id="hu-share">Поделиться</button></div>
 <div class="content" id="hu-results">Загрузка...</div>
-<div class="muted">Рейтинг тестовый: результаты пока не защищены от накрутки. На бесплатном сервере облачные данные могут сбрасываться.</div>
+<div class="muted">Сервер проверяет записанные ходы, но полностью исключить автоматизацию и накрутку пока нельзя. На бесплатном сервере облачные данные могут сбрасываться.</div>
 </section>
 <script>
 (()=>{
@@ -383,6 +399,19 @@ share.onclick=()=>guard(async()=>{
  try{
   const login=await call('/api/huevo/login',{method:'POST',body:JSON.stringify({query})});
   session=login.token;
+  window.snakeBeginRun=async()=>{
+    const data=await call('/api/huevo/run/start',{method:'POST',body:'{}'});
+    return {runId:data.runId,seed:data.seed};
+  };
+  window.snakeEndRun=async(submission)=>{
+    try{
+      const data=await call('/api/huevo/run/finish',{method:'POST',body:JSON.stringify(submission)});
+      show('Рекорд подтверждён сервером · '+data.best+' очков');
+      const ranks=await call('/api/huevo/leaderboard');
+      renderRank(ranks.players);
+      return data;
+    }catch(e){show('Результат не засчитан: '+e.message);throw e}
+  };
   document.getElementById('hu-player').textContent=login.user?.name||'Игрок huEVO';
   for(const b of buttons)b.disabled=false;
   show('Вход подтверждён');
