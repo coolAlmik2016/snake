@@ -544,11 +544,12 @@ for(const button of donationButtons)button.addEventListener('click',()=>{
 });
 donationForm.addEventListener('submit',event=>{
   event.preventDefault();
-  const raw=donationCustom.value.trim();
-  if(!/^\d+$/.test(raw)){
-    donationMessage.textContent='Укажи целое число монэток.';return;
+  // Use the browser's numeric input parser: this also avoids a stale/broken regex.
+  const amount=donationCustom.valueAsNumber;
+  if(!Number.isSafeInteger(amount)||amount<1||amount>100000){
+    donationMessage.textContent='Введи целое число от 1 до 100 000 монэток.';return;
   }
-  donateAmount(Number(raw));
+  donateAmount(amount);
 });
 
 global.onclick=()=>guard(async()=>{const d=await call('/api/huevo/leaderboard');renderRank(d.players);show('Топ игроков huEVO · '+(d.mode==='test'?'тестовый режим':'общий рейтинг'))},global);
