@@ -62,6 +62,8 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visibl
 /* huEVO side panel: left of board in embedded desktop/tablet frames */
 @media(min-width:650px){
  .shell{grid-template-columns:minmax(195px,260px) minmax(0,1fr);grid-template-rows:auto auto;align-items:start;gap:12px;max-width:1100px}
+ .shell:has(>#huevo-integration[hidden]){display:flex;flex-direction:column;align-items:stretch;max-width:1000px}
+ .shell:has(>#huevo-integration[hidden])>.arena{width:100%;align-self:center}
  .shell>.shop{grid-column:1 / -1;grid-row:1}
  .shell>#huevo-integration{grid-column:1;grid-row:2;align-self:start;max-width:none;width:100%;margin:0;padding:11px;min-width:0;position:sticky;top:8px;max-height:calc(100dvh - 18px);overflow-y:auto}
  .shell>.arena{grid-column:2;grid-row:2;margin:0;min-width:0;min-height:0;gap:8px;align-content:start}
