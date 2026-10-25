@@ -545,7 +545,7 @@ for(const button of donationButtons)button.addEventListener('click',()=>{
 donationForm.addEventListener('submit',event=>{
   event.preventDefault();
   const raw=donationCustom.value.trim();
-  if(!/^\\d+$/.test(raw)){
+  if(!/^\d+$/.test(raw)){
     donationMessage.textContent='Укажи целое число монэток.';return;
   }
   donateAmount(Number(raw));
