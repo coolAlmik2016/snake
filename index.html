@@ -112,6 +112,12 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visibl
     <button type="button" data-donation="50" disabled>50 монэток</button>
     <button type="button" data-donation="100" disabled>100 монэток</button>
   </div>
+  <form id="hu-donation-form" style="display:flex;gap:7px;flex-wrap:wrap;align-items:end;margin:10px 0 0">
+    <label for="hu-donation-custom" style="font-size:12px;flex:1;min-width:145px">Сумма в монэтках (1–100 000)
+      <input id="hu-donation-custom" type="number" min="1" max="100000" step="1" value="5" inputmode="numeric" required style="display:block;width:100%;background:#192530;color:white;border:1px solid #60748a;border-radius:5px;padding:8px;margin-top:5px;font-size:13px">
+    </label>
+    <button type="submit" id="hu-donation-submit" disabled style="min-height:35px">Поддержать</button>
+  </form>
   <p id="hu-donation-message" role="status" style="font-size:12px;color:#b7cade;margin:8px 0 0">Перед подтверждением huEVO покажет сумму и баланс.</p>
 </section>
 <div class="content" id="hu-results">Загрузка...</div>
@@ -482,6 +488,9 @@ donate.setAttribute('aria-controls','hu-donate-panel');
 donate.setAttribute('aria-expanded','false');
 
 const donationButtons=[...document.querySelectorAll('#hu-donation-amounts [data-donation]')];
+const donationForm=document.getElementById('hu-donation-form');
+const donationCustom=document.getElementById('hu-donation-custom');
+const donationSubmit=document.getElementById('hu-donation-submit');
 const donationMessage=document.getElementById('hu-donation-message');
 const donationMode=document.getElementById('hu-donation-mode');
 let donationsEnabled=false;
@@ -497,13 +506,19 @@ async function refreshDonationMode(){
     }
   }catch(e){donationsEnabled=false;donationMode.textContent='Недоступна проверка кошелька: '+e.message}
   for(const b of donationButtons)b.disabled=!donationsEnabled;
+  donationCustom.disabled=!donationsEnabled;
+  donationSubmit.disabled=!donationsEnabled;
 }
 async function donateAmount(amount){
   if(!donationsEnabled||donationBusy)return;
+  if(!Number.isSafeInteger(amount)||amount<1||amount>100000){
+    donationMessage.textContent='Введите целое число от 1 до 100 000 монэток.';return;
+  }
   if(!window.huevo || typeof window.huevo.confirmPayment!=='function'){
     donationMessage.textContent='Для доната открой игру внутри huEVO.';return;
   }
   donationBusy=true;for(const b of donationButtons)b.disabled=true;
+  donationCustom.disabled=true;donationSubmit.disabled=true;
   let intentId=null;
   try{
     donationMessage.textContent='Создание намерения оплаты…';
@@ -520,9 +535,21 @@ async function donateAmount(amount){
   }finally{
     donationBusy=false;
     for(const b of donationButtons)b.disabled=!donationsEnabled;
+    donationCustom.disabled=!donationsEnabled;donationSubmit.disabled=!donationsEnabled;
   }
 }
-for(const button of donationButtons)button.addEventListener('click',()=>donateAmount(Number(button.dataset.donation)));
+for(const button of donationButtons)button.addEventListener('click',()=>{
+  donationCustom.value=button.dataset.donation;
+  donationMessage.textContent='Сумма выбрана. Нажми «Поддержать», чтобы перейти к подтверждению huEVO.';
+});
+donationForm.addEventListener('submit',event=>{
+  event.preventDefault();
+  const raw=donationCustom.value.trim();
+  if(!/^\\d+$/.test(raw)){
+    donationMessage.textContent='Укажи целое число монэток.';return;
+  }
+  donateAmount(Number(raw));
+});
 
 global.onclick=()=>guard(async()=>{const d=await call('/api/huevo/leaderboard');renderRank(d.players);show('Топ игроков huEVO · '+(d.mode==='test'?'тестовый режим':'общий рейтинг'))},global);
 friends.onclick=()=>guard(async()=>{
