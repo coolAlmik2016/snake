@@ -104,7 +104,15 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visibl
 <section id="hu-donate-panel" hidden aria-label="Поддержать разработку" style="border:1px solid #526679;background:#253242;border-radius:7px;padding:10px;margin-bottom:10px">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><strong>Поддержать Snake huEVO</strong><button id="hu-donate-close" type="button" aria-label="Закрыть окно доната">✕</button></div>
   <p style="margin:7px 0;font-size:12px">Донаты будут проходить только через внутреннюю платёжную систему huEVO.</p>
-  <p style="margin:7px 0 0;font-size:12px;color:#aec3d8">Оплата пока не активирована: ожидается уточнение параметров платёжного API huEVO. Списаний нет.</p>
+  <div id="hu-donation-mode" style="font-size:12px;color:#aec3d8;margin:7px 0">Загрузка платёжных настроек…</div>
+  <div id="hu-donation-amounts" style="display:flex;gap:6px;flex-wrap:wrap">
+    <button type="button" data-donation="5" disabled>5 монэток</button>
+    <button type="button" data-donation="10" disabled>10 монэток</button>
+    <button type="button" data-donation="25" disabled>25 монэток</button>
+    <button type="button" data-donation="50" disabled>50 монэток</button>
+    <button type="button" data-donation="100" disabled>100 монэток</button>
+  </div>
+  <p id="hu-donation-message" role="status" style="font-size:12px;color:#b7cade;margin:8px 0 0">Перед подтверждением huEVO покажет сумму и баланс.</p>
 </section>
 <div class="content" id="hu-results">Загрузка...</div>
 <div class="muted"></div>
@@ -472,6 +480,50 @@ donate.onclick=()=>{donatePanel.hidden=!donatePanel.hidden;donate.setAttribute('
 donateClose.onclick=()=>{donatePanel.hidden=true;donate.setAttribute('aria-expanded','false')};
 donate.setAttribute('aria-controls','hu-donate-panel');
 donate.setAttribute('aria-expanded','false');
+
+const donationButtons=[...document.querySelectorAll('#hu-donation-amounts [data-donation]')];
+const donationMessage=document.getElementById('hu-donation-message');
+const donationMode=document.getElementById('hu-donation-mode');
+let donationsEnabled=false;
+let donationBusy=false;
+async function refreshDonationMode(){
+  try{
+    const d=await call('/api/huevo/donations/status');
+    if(d.frozen){
+      donationsEnabled=false;donationMode.textContent='Кошелёк приложения временно недоступен.';
+    }else{
+      donationsEnabled=!!d.paymentsConfigured;
+      donationMode.textContent=d.realDonationsEnabled?'Реальные донаты · монэтки будут списаны только после подтверждения huEVO':'Тестовые донаты · реальные монэтки не списываются';
+    }
+  }catch(e){donationsEnabled=false;donationMode.textContent='Недоступна проверка кошелька: '+e.message}
+  for(const b of donationButtons)b.disabled=!donationsEnabled;
+}
+async function donateAmount(amount){
+  if(!donationsEnabled||donationBusy)return;
+  if(!window.huevo || typeof window.huevo.confirmPayment!=='function'){
+    donationMessage.textContent='Для доната открой игру внутри huEVO.';return;
+  }
+  donationBusy=true;for(const b of donationButtons)b.disabled=true;
+  let intentId=null;
+  try{
+    donationMessage.textContent='Создание намерения оплаты…';
+    const created=await call('/api/huevo/donations/create',{method:'POST',body:JSON.stringify({amount})});
+    intentId=created.intent_id;
+    if(!/^pi_[A-Za-z0-9_-]{5,100}$/.test(intentId||''))throw Error('Неверный ID платежа');
+    donationMessage.textContent='Подтверди платёж в окне huEVO или нажми «Отказать».';
+    try{await window.huevo.confirmPayment(intentId)}catch(e){donationMessage.textContent='Проверяем статус после закрытия окна huEVO…'}
+    const verified=await call('/api/huevo/donations/'+encodeURIComponent(intentId));
+    const map={succeeded:verified.test?'Тестовый донат успешно выполнен. Реальные монэтки не списаны.':'Спасибо за поддержку! Оплата подтверждена сервером.',cancelled:'Донат отменён — монэтки не списаны.',expired:'Время подтверждения истекло.',failed:'huEVO отклонил платёж.',pending:'Платёж ещё ожидает решения. Повтори проверку позже.'};
+    donationMessage.textContent=map[verified.status]||'Статус неизвестен.';
+  }catch(e){
+    donationMessage.textContent='Не удалось завершить оплату: '+e.message;
+  }finally{
+    donationBusy=false;
+    for(const b of donationButtons)b.disabled=!donationsEnabled;
+  }
+}
+for(const button of donationButtons)button.addEventListener('click',()=>donateAmount(Number(button.dataset.donation)));
+
 global.onclick=()=>guard(async()=>{const d=await call('/api/huevo/leaderboard');renderRank(d.players);show('Топ игроков huEVO · '+(d.mode==='test'?'тестовый режим':'общий рейтинг'))},global);
 friends.onclick=()=>guard(async()=>{
  if(!window.huevo?.requestAccess)throw Error('Открой игру внутри huEVO');
@@ -502,6 +554,7 @@ share.onclick=()=>guard(async()=>{
  try{
   const login=await call('/api/huevo/login',{method:'POST',body:JSON.stringify({query})});
   session=login.token;
+  refreshDonationMode().catch(()=>{});
   window.snakeBeginRun=async()=>{
     const data=await call('/api/huevo/run/start',{method:'POST',body:'{}'});
     return {runId:data.runId,seed:data.seed};
