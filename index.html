@@ -100,7 +100,7 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visibl
   </section>
   <section id="huevo-integration" hidden aria-label="Сообщество huEVO">
 <div class="head"><strong id="hu-player">huEVO · подключение</strong><span id="hu-status" class="muted" role="status">Проверка входа...</span></div>
-<div class="tabs"><button type="button" id="hu-global">Топ игроков</button><button type="button" id="hu-friends">Рейтинг друзей</button><button type="button" id="hu-save">Сохранить цвета</button><button type="button" id="hu-load">Загрузить цвета</button><button type="button" id="hu-share">Поделиться</button></div>
+<div class="tabs"><button type="button" id="hu-global">Топ игроков</button><button type="button" id="hu-friends">Рейтинг друзей</button><button type="button" id="hu-share">Поделиться</button></div>
 <div class="content" id="hu-results">Загрузка...</div>
 <div class="muted"></div>
 </section>
@@ -152,6 +152,24 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visibl
       {id:'rainbow',name:'Радуга',body:'#8ed4ff',head:'#d0f4ff',eye:'#15273a',cost:200}
     ];
     let owned=new Set(['mint']);
+    const cloudMode=new URLSearchParams(location.search).has('hu_hash');
+    let cloudReady=false;
+    function applyCloudInventory(inv,bestScore){
+      if(!inv)return;
+      cloudReady=true;
+      wallet=Math.max(0,Number(inv.wallet)||0);
+      owned=new Set(['mint',...(Array.isArray(inv.owned)?inv.owned:[]).filter(id=>skins.some(s=>s.id===id))]);
+      skinId=owned.has(inv.skinId)?inv.skinId:'mint';
+      customColor=/^#[0-9a-f]{6}$/i.test(inv.customColor||'')?inv.customColor:'#7bd9ca';
+      if(Number.isFinite(bestScore))best=Math.max(0,bestScore);
+      store('huevo-snake-apples',wallet);
+      store('huevo-snake-skins',JSON.stringify([...owned]));
+      store('huevo-snake-color',skinId);
+      store('huevo-snake-custom-color',customColor);
+      renderShop();updateUI();draw();
+    }
+    window.snakeApplyInventory=applyCloudInventory;
+    window.snakeCloudEnabled=()=>cloudMode;
     let customColor='#7bd9ca';
     try {
       best=Math.max(0,Number(localStorage.getItem('huevo-snake-record'))||0);
@@ -225,10 +243,22 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visibl
         const btn=document.createElement('button');btn.type='button';btn.className='skin-btn';
         const active=skin.id===skinId,unlocked=owned.has(skin.id);
         btn.textContent=active?'✓':unlocked?'Выбрать':wallet>=skin.cost?'Купить':'🔒';
-        btn.disabled=active||(!unlocked&&wallet<skin.cost);
+        btn.disabled=active||(cloudMode&&!cloudReady)||(!unlocked&&wallet<skin.cost);
         btn.setAttribute('aria-label',active?skin.name+' выбран':unlocked?'Выбрать '+skin.name:'Купить цвет '+skin.name+' за '+skin.cost+' яблок');
-        btn.addEventListener('click',()=>{
+        btn.addEventListener('click',async()=>{
           wakeAudio();
+          if(cloudMode){
+            if(!cloudReady||typeof window.snakeCloudChange!=='function')return;
+            btn.disabled=true;
+            try{
+              const isOwned=owned.has(skin.id);
+              const inv=await window.snakeCloudChange(isOwned?'select':'buy',skin.id);
+              applyCloudInventory(inv);
+              sfx(isOwned?'select':'buy');
+            }catch(e){if(typeof window.snakeCloudError==='function')window.snakeCloudError(e)}
+            finally{renderShop();}
+            return;
+          }
           if(owned.has(skin.id)){skinId=skin.id;sfx('select');}
           else if(wallet>=skin.cost){wallet-=skin.cost;owned.add(skin.id);skinId=skin.id;store('huevo-snake-apples',wallet);sfx('buy');}
           else return;
@@ -239,12 +269,19 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visibl
           const picker=document.createElement('input');picker.type='color';picker.className='skin-color-picker';
           picker.value=customColor;picker.title='Выбрать свой цвет';picker.setAttribute('aria-label','Выбрать свой цвет змейки');
           picker.addEventListener('input',()=>{
+            if(cloudMode)return;
             customColor=picker.value;store('huevo-snake-custom-color',customColor);
             skinId='palette';saveSkins();dot.style.background=customColor;
             for(const el of container.children)el.classList.remove('selected');row.classList.add('selected');
             draw();
           });
-          picker.addEventListener('change',renderShop);
+          picker.addEventListener('change',async()=>{
+            if(cloudMode&&cloudReady&&typeof window.snakeCloudChange==='function'){
+              try{applyCloudInventory(await window.snakeCloudChange('select','palette',picker.value))}
+              catch(e){if(window.snakeCloudError)window.snakeCloudError(e)}
+            }
+            renderShop();
+          });
           row.append(picker);
         }
         container.append(row);
@@ -309,7 +346,7 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visibl
       snake.unshift(head);
       if(eating){
         score+=10;level=1+Math.floor(score/50);
-        wallet+=1;store('huevo-snake-apples',wallet);renderShop();sfx('apple');
+        if(!cloudMode){wallet+=1;store('huevo-snake-apples',wallet);renderShop();}sfx('apple');
         if(score>best){best=score;store('huevo-snake-record',best)}
         food=newFood();updateUI();if(!food){finish(true);return;}
       }else snake.pop();
@@ -398,7 +435,7 @@ const params=new URLSearchParams(location.search);
 if(!params.has('hu_hash')||!params.has('hu_user_id'))return;
 root.hidden=false;
 const query=location.search;
-const buttons=['hu-global','hu-friends','hu-save','hu-load','hu-share'].map(id=>document.getElementById(id));
+const buttons=['hu-global','hu-friends','hu-share'].map(id=>document.getElementById(id));
 for(const b of buttons)b.disabled=true;
 let session=null;
 async function call(path,opts={}){
@@ -422,8 +459,6 @@ async function guard(fn,button){
 }
 const global=document.getElementById('hu-global');
 const friends=document.getElementById('hu-friends');
-const save=document.getElementById('hu-save');
-const load=document.getElementById('hu-load');
 const share=document.getElementById('hu-share');
 global.onclick=()=>guard(async()=>{const d=await call('/api/huevo/leaderboard');renderRank(d.players);show('Топ игроков huEVO · '+(d.mode==='test'?'тестовый режим':'общий рейтинг'))},global);
 friends.onclick=()=>guard(async()=>{
@@ -436,20 +471,17 @@ friends.onclick=()=>guard(async()=>{
  }finally{grant.token=null}
 },friends);
 function localSave(){
- try{return {wallet:Number(localStorage.getItem('huevo-snake-apples')||0),skinId:localStorage.getItem('huevo-snake-color')||'mint',owned:JSON.parse(localStorage.getItem('huevo-snake-skins')||'["mint"]'),customColor:localStorage.getItem('huevo-snake-custom-color')||'#7bd9ca'}}catch{return {wallet:0,skinId:'mint',owned:['mint']}}
+ try{return {wallet:Number(localStorage.getItem('huevo-snake-apples')||0),skinId:localStorage.getItem('huevo-snake-color')||'mint',owned:JSON.parse(localStorage.getItem('huevo-snake-skins')||'["mint"]'),customColor:localStorage.getItem('huevo-snake-custom-color')||'#7bd9ca'}}
+ catch{return {wallet:0,skinId:'mint',owned:['mint'],customColor:'#7bd9ca'}}
 }
-save.onclick=()=>guard(async()=>{await call('/api/huevo/save',{method:'PUT',body:JSON.stringify({save:localSave()})});show('Цвета сохранены на сервере (тестовое хранилище)')},save);
-load.onclick=()=>guard(async()=>{
- const d=await call('/api/huevo/me');
- if(!d.save)return show('Облачного сохранения пока нет');
- try{
-  localStorage.setItem('huevo-snake-apples',String(d.save.wallet||0));
-  localStorage.setItem('huevo-snake-color',d.save.skinId||'mint');
-  localStorage.setItem('huevo-snake-skins',JSON.stringify(d.save.owned||['mint']));
-  if(/^#[0-9a-f]{6}$/i.test(d.save.customColor||''))localStorage.setItem('huevo-snake-custom-color',d.save.customColor);
-  show('Цвета загружены. Обнови страницу, чтобы применить изменения.');
- }catch{show('Браузер запретил сохранение')}
-},load);
+window.snakeCloudError=(e)=>show('Не удалось синхронизировать: '+(e?.message||'Ошибка'));
+window.snakeCloudChange=async(action,skinId,color)=>{
+ if(!session)throw Error('huEVO не подключён');
+ const path=action==='buy'?'/api/huevo/inventory/buy':'/api/huevo/inventory/select';
+ const data=await call(path,{method:'POST',body:JSON.stringify({skinId,...(color?{color}:{})})});
+ show('Цвет и баланс сохранены в облаке');
+ return data.inventory;
+};
 share.onclick=()=>guard(async()=>{
  if(!window.huevo?.share)throw Error('Открой игру внутри huEVO');
  const d=await window.huevo.share();show(d?.shared?'Ссылка отправлена':'Поделиться отменено');
@@ -465,15 +497,21 @@ share.onclick=()=>guard(async()=>{
   window.snakeEndRun=async(submission)=>{
     try{
       const data=await call('/api/huevo/run/finish',{method:'POST',body:JSON.stringify(submission)});
-      show('Рекорд подтверждён сервером · '+data.best+' очков');
+      if(data.inventory)window.snakeApplyInventory?.(data.inventory,data.best);
+      show('Рекорд подтверждён · +'+Number(data.apples||0)+' 🍎 · '+data.best+' очков');
       const ranks=await call('/api/huevo/leaderboard');
       renderRank(ranks.players);
       return data;
     }catch(e){show('Результат не засчитан: '+e.message);throw e}
   };
   document.getElementById('hu-player').textContent=login.user?.name||'Игрок huEVO';
+  const state=await call('/api/huevo/me');
+  let inventory=state.inventory||state.save;
+  // Existing accounts with no prior cloud inventory may bring their old local items once.
+  if(inventory&&!inventory.owned?.length)inventory=null;
+  if(inventory)window.snakeApplyInventory?.(inventory,state.user?.best);
   for(const b of buttons)b.disabled=false;
-  show('Вход подтверждён');
+  show('Сохранения синхронизируются автоматически');
   const ranks=await call('/api/huevo/leaderboard');renderRank(ranks.players);
  }catch(e){write('Игра доступна без подключения к рейтингу.');show('Ошибка входа: '+(e.message||'неизвестная ошибка'))}
 })();
