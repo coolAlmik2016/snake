@@ -120,17 +120,6 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visibl
   </form>
   <p id="hu-donation-message" role="status" style="font-size:12px;color:#b7cade;margin:8px 0 0">Перед подтверждением huEVO покажет сумму и баланс.</p>
 </section>
-<section id="hu-owner-panel" hidden aria-label="Кошелёк владельца" style="border:1px solid #455465;border-radius:7px;padding:10px;margin:10px 0;background:#202c38">
-  <strong>Кошелёк владельца</strong>
-  <p id="hu-owner-balance" style="font-size:12px;margin:6px 0">Загрузка баланса…</p>
-  <form id="hu-owner-form" style="display:flex;flex-wrap:wrap;gap:6px;align-items:end">
-    <label style="font-size:12px;flex:1;min-width:110px">Сумма монэток
-      <input id="hu-owner-amount" type="number" min="1" max="100000" step="1" required style="display:block;width:100%;padding:7px;background:#192530;border:1px solid #60748a;border-radius:5px;color:white;margin-top:4px">
-    </label>
-    <button type="submit">Предпросмотр выплаты</button>
-  </form>
-  <p id="hu-owner-result" role="status" style="font-size:12px;color:#b7cade;margin:8px 0 0">Только симуляция — перевод не выполняется.</p>
-</section>
 <div class="content" id="hu-results">Загрузка...</div>
 <div class="muted"></div>
 </section>
@@ -490,30 +479,6 @@ async function guard(fn,button){
 const global=document.getElementById('hu-global');
 const friends=document.getElementById('hu-friends');
 const share=document.getElementById('hu-share');
-const ownerPanel=document.getElementById('hu-owner-panel');
-const ownerBalance=document.getElementById('hu-owner-balance');
-const ownerResult=document.getElementById('hu-owner-result');
-const ownerForm=document.getElementById('hu-owner-form');
-const ownerAmount=document.getElementById('hu-owner-amount');
-async function loadOwnerPanel(){
-  try{
-    const data=await call('/api/huevo/owner/summary');
-    ownerPanel.hidden=false;
-    ownerBalance.textContent='Баланс приложения: '+(data.balance===null?'неизвестен':data.balance+' монэток')+(data.frozen?' · Кошелёк заморожен':'');
-  }catch(e){ownerPanel.hidden=true;}
-}
-ownerForm.addEventListener('submit',async e=>{
-  e.preventDefault();
-  const amount=ownerAmount.valueAsNumber;
-  if(!Number.isSafeInteger(amount)||amount<1||amount>100000){ownerResult.textContent='Введи целое число от 1 до 100 000';return;}
-  const button=ownerForm.querySelector('button');
-  button.disabled=true;
-  try{
-    const preview=await call('/api/huevo/owner/preview',{method:'POST',body:JSON.stringify({amount})});
-    ownerResult.textContent='Проверка: '+preview.amount+' монэток → аккаунт '+preview.recipientId+'. Баланс после возможной выплаты: '+preview.balanceAfter+'. Это симуляция, ничего не переведено.';
-  }catch(err){ownerResult.textContent=err.message||'Не удалось проверить выплату'}
-  finally{button.disabled=false}
-});
 const donate=document.getElementById('hu-donate');
 const donatePanel=document.getElementById('hu-donate-panel');
 const donateClose=document.getElementById('hu-donate-close');
@@ -617,7 +582,6 @@ share.onclick=()=>guard(async()=>{
  try{
   const login=await call('/api/huevo/login',{method:'POST',body:JSON.stringify({query})});
   session=login.token;
-  loadOwnerPanel().catch(()=>{});
   refreshDonationMode().catch(()=>{});
   window.snakeBeginRun=async()=>{
     const data=await call('/api/huevo/run/start',{method:'POST',body:'{}'});
