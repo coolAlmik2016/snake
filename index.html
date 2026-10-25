@@ -633,7 +633,7 @@ share.onclick=()=>guard(async()=>{
       return data;
     }catch(e){show('Результат не засчитан: '+e.message);throw e}
   };
-  document.getElementById('hu-player').textContent=login.user?.name||'Игрок huEVO';
+  document.getElementById('hu-player').textContent=(login.user?.name||'Игрок huEVO')+' · ID: '+String(login.user?.id||'—');
   const state=await call('/api/huevo/me');
   let inventory=state.inventory||state.save;
   if(state.canImportLegacy){
